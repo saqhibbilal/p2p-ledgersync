@@ -795,6 +795,7 @@ type GetNodeInfoResponse struct {
 	NodeId          string                 `protobuf:"bytes,3,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
 	ListenAddr      string                 `protobuf:"bytes,4,opt,name=listen_addr,json=listenAddr,proto3" json:"listen_addr,omitempty"`
 	Summary         *LedgerSummary         `protobuf:"bytes,5,opt,name=summary,proto3" json:"summary,omitempty"`
+	ConnectedPeers  []*Peer                `protobuf:"bytes,6,rep,name=connected_peers,json=connectedPeers,proto3" json:"connected_peers,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -860,6 +861,13 @@ func (x *GetNodeInfoResponse) GetListenAddr() string {
 func (x *GetNodeInfoResponse) GetSummary() *LedgerSummary {
 	if x != nil {
 		return x.Summary
+	}
+	return nil
+}
+
+func (x *GetNodeInfoResponse) GetConnectedPeers() []*Peer {
+	if x != nil {
+		return x.ConnectedPeers
 	}
 	return nil
 }
@@ -1404,14 +1412,15 @@ const file_ledger_v1_ledger_proto_rawDesc = "" +
 	"\x04hash\x18\x03 \x01(\fR\x04hash\x12.\n" +
 	"\x04time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x18\n" +
 	"\apayload\x18\x05 \x01(\fR\apayload\"\x14\n" +
-	"\x12GetNodeInfoRequest\"\xd9\x01\n" +
+	"\x12GetNodeInfoRequest\"\x93\x02\n" +
 	"\x13GetNodeInfoResponse\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\rR\x0fprotocolVersion\x12)\n" +
 	"\x10software_version\x18\x02 \x01(\tR\x0fsoftwareVersion\x12\x17\n" +
 	"\anode_id\x18\x03 \x01(\tR\x06nodeId\x12\x1f\n" +
 	"\vlisten_addr\x18\x04 \x01(\tR\n" +
 	"listenAddr\x122\n" +
-	"\asummary\x18\x05 \x01(\v2\x18.ledger.v1.LedgerSummaryR\asummary\"\x19\n" +
+	"\asummary\x18\x05 \x01(\v2\x18.ledger.v1.LedgerSummaryR\asummary\x128\n" +
+	"\x0fconnected_peers\x18\x06 \x03(\v2\x0f.ledger.v1.PeerR\x0econnectedPeers\"\x19\n" +
 	"\x17StreamNodeEventsRequest\"F\n" +
 	"\x18StreamNodeEventsResponse\x12*\n" +
 	"\x05event\x18\x01 \x01(\v2\x14.ledger.v1.NodeEventR\x05event\"\xef\x02\n" +
@@ -1505,32 +1514,33 @@ var file_ledger_v1_ledger_proto_depIdxs = []int32{
 	10, // 11: ledger.v1.GetBlocksResponse.block:type_name -> ledger.v1.Block
 	21, // 12: ledger.v1.Block.time:type_name -> google.protobuf.Timestamp
 	3,  // 13: ledger.v1.GetNodeInfoResponse.summary:type_name -> ledger.v1.LedgerSummary
-	15, // 14: ledger.v1.StreamNodeEventsResponse.event:type_name -> ledger.v1.NodeEvent
-	21, // 15: ledger.v1.NodeEvent.at:type_name -> google.protobuf.Timestamp
-	16, // 16: ledger.v1.NodeEvent.peer_up:type_name -> ledger.v1.PeerUp
-	17, // 17: ledger.v1.NodeEvent.peer_down:type_name -> ledger.v1.PeerDown
-	18, // 18: ledger.v1.NodeEvent.ledger_tip_changed:type_name -> ledger.v1.LedgerTipChanged
-	19, // 19: ledger.v1.NodeEvent.blocks_sent:type_name -> ledger.v1.BlocksSent
-	20, // 20: ledger.v1.NodeEvent.blocks_received:type_name -> ledger.v1.BlocksReceived
-	2,  // 21: ledger.v1.PeerUp.peer:type_name -> ledger.v1.Peer
-	2,  // 22: ledger.v1.PeerDown.peer:type_name -> ledger.v1.Peer
-	2,  // 23: ledger.v1.BlocksSent.peer:type_name -> ledger.v1.Peer
-	2,  // 24: ledger.v1.BlocksReceived.peer:type_name -> ledger.v1.Peer
-	0,  // 25: ledger.v1.NodeService.Handshake:input_type -> ledger.v1.HandshakeRequest
-	4,  // 26: ledger.v1.NodeService.GossipStream:input_type -> ledger.v1.GossipStreamRequest
-	8,  // 27: ledger.v1.NodeService.GetBlocks:input_type -> ledger.v1.GetBlocksRequest
-	11, // 28: ledger.v1.ObserverService.GetNodeInfo:input_type -> ledger.v1.GetNodeInfoRequest
-	13, // 29: ledger.v1.ObserverService.StreamNodeEvents:input_type -> ledger.v1.StreamNodeEventsRequest
-	1,  // 30: ledger.v1.NodeService.Handshake:output_type -> ledger.v1.HandshakeResponse
-	5,  // 31: ledger.v1.NodeService.GossipStream:output_type -> ledger.v1.GossipStreamResponse
-	9,  // 32: ledger.v1.NodeService.GetBlocks:output_type -> ledger.v1.GetBlocksResponse
-	12, // 33: ledger.v1.ObserverService.GetNodeInfo:output_type -> ledger.v1.GetNodeInfoResponse
-	14, // 34: ledger.v1.ObserverService.StreamNodeEvents:output_type -> ledger.v1.StreamNodeEventsResponse
-	30, // [30:35] is the sub-list for method output_type
-	25, // [25:30] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	2,  // 14: ledger.v1.GetNodeInfoResponse.connected_peers:type_name -> ledger.v1.Peer
+	15, // 15: ledger.v1.StreamNodeEventsResponse.event:type_name -> ledger.v1.NodeEvent
+	21, // 16: ledger.v1.NodeEvent.at:type_name -> google.protobuf.Timestamp
+	16, // 17: ledger.v1.NodeEvent.peer_up:type_name -> ledger.v1.PeerUp
+	17, // 18: ledger.v1.NodeEvent.peer_down:type_name -> ledger.v1.PeerDown
+	18, // 19: ledger.v1.NodeEvent.ledger_tip_changed:type_name -> ledger.v1.LedgerTipChanged
+	19, // 20: ledger.v1.NodeEvent.blocks_sent:type_name -> ledger.v1.BlocksSent
+	20, // 21: ledger.v1.NodeEvent.blocks_received:type_name -> ledger.v1.BlocksReceived
+	2,  // 22: ledger.v1.PeerUp.peer:type_name -> ledger.v1.Peer
+	2,  // 23: ledger.v1.PeerDown.peer:type_name -> ledger.v1.Peer
+	2,  // 24: ledger.v1.BlocksSent.peer:type_name -> ledger.v1.Peer
+	2,  // 25: ledger.v1.BlocksReceived.peer:type_name -> ledger.v1.Peer
+	0,  // 26: ledger.v1.NodeService.Handshake:input_type -> ledger.v1.HandshakeRequest
+	4,  // 27: ledger.v1.NodeService.GossipStream:input_type -> ledger.v1.GossipStreamRequest
+	8,  // 28: ledger.v1.NodeService.GetBlocks:input_type -> ledger.v1.GetBlocksRequest
+	11, // 29: ledger.v1.ObserverService.GetNodeInfo:input_type -> ledger.v1.GetNodeInfoRequest
+	13, // 30: ledger.v1.ObserverService.StreamNodeEvents:input_type -> ledger.v1.StreamNodeEventsRequest
+	1,  // 31: ledger.v1.NodeService.Handshake:output_type -> ledger.v1.HandshakeResponse
+	5,  // 32: ledger.v1.NodeService.GossipStream:output_type -> ledger.v1.GossipStreamResponse
+	9,  // 33: ledger.v1.NodeService.GetBlocks:output_type -> ledger.v1.GetBlocksResponse
+	12, // 34: ledger.v1.ObserverService.GetNodeInfo:output_type -> ledger.v1.GetNodeInfoResponse
+	14, // 35: ledger.v1.ObserverService.StreamNodeEvents:output_type -> ledger.v1.StreamNodeEventsResponse
+	31, // [31:36] is the sub-list for method output_type
+	26, // [26:31] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_ledger_v1_ledger_proto_init() }

@@ -52,6 +52,15 @@ func (n *Node) Handshake(ctx context.Context, req *ledgerv1.HandshakeRequest) (*
 		return nil, fmt.Errorf("nil request")
 	}
 
+	// Learn about the caller so peer discovery works even for nodes that only
+	// receive inbound connections.
+	if req.GetListenAddr() != "" {
+		n.peers.NotePeer(&ledgerv1.Peer{
+			NodeId: req.GetNodeId(),
+			Addr:   req.GetListenAddr(),
+		})
+	}
+
 	resp := &ledgerv1.HandshakeResponse{
 		ProtocolVersion: ProtocolVersion,
 		SoftwareVersion: SoftwareVersion,
@@ -176,6 +185,7 @@ func (n *Node) GetNodeInfo(ctx context.Context, _ *ledgerv1.GetNodeInfoRequest) 
 		NodeId:          n.id,
 		ListenAddr:      n.listenAddr,
 		Summary:         summaryFromStore(n.store),
+		ConnectedPeers:  n.peers.ListPeersPB(),
 	}, nil
 }
 
@@ -185,24 +195,47 @@ func (n *Node) StreamNodeEvents(_ *ledgerv1.StreamNodeEventsRequest, stream ledg
 
 	// initial snapshot as a tip-change event (from zero values)
 	h, hash := n.store.Tip()
-	n.events.Publish(&ledgerv1.NodeEvent{
-		At: timestamppb.Now(),
-		Event: &ledgerv1.NodeEvent_LedgerTipChanged{
-			LedgerTipChanged: &ledgerv1.LedgerTipChanged{
-				OldHeight: 0,
-				OldHash:   make([]byte, 32),
-				NewHeight: h,
-				NewHash:   hash[:],
+	_ = stream.Send(&ledgerv1.StreamNodeEventsResponse{
+		Event: &ledgerv1.NodeEvent{
+			At: timestamppb.Now(),
+			Event: &ledgerv1.NodeEvent_LedgerTipChanged{
+				LedgerTipChanged: &ledgerv1.LedgerTipChanged{
+					OldHeight: 0,
+					OldHash:   make([]byte, 32),
+					NewHeight: h,
+					NewHash:   hash[:],
+				},
 			},
 		},
 	})
 
-	for ev := range ch {
-		if err := stream.Send(&ledgerv1.StreamNodeEventsResponse{Event: ev}); err != nil {
-			return err
+	// heartbeat to keep observers updated even when no events are occurring
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	heartbeat := func() error {
+		return stream.Send(&ledgerv1.StreamNodeEventsResponse{
+			Event: &ledgerv1.NodeEvent{At: timestamppb.Now()},
+		})
+	}
+
+	for {
+		select {
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		case <-ticker.C:
+			if err := heartbeat(); err != nil {
+				return err
+			}
+		case ev, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			if err := stream.Send(&ledgerv1.StreamNodeEventsResponse{Event: ev}); err != nil {
+				return err
+			}
 		}
 	}
-	return nil
 }
 
 func (n *Node) Logf(format string, args ...any) {

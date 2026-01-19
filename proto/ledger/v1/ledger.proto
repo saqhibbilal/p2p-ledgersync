@@ -106,6 +106,7 @@ message GetNodeInfoResponse {
   string node_id = 3;
   string listen_addr = 4;
   LedgerSummary summary = 5;
+  repeated Peer connected_peers = 6;
 }
 
 message StreamNodeEventsRequest {}

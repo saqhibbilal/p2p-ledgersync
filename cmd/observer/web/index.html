@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ledger Sync Dashboard</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Quantico:wght@400;700&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="/assets/styles.css" />
+</head>
+
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="brand">
+        <div class="title">Ledger Sync</div>
+        <div class="subtitle">Mini distributed ledger synchronization dashboard</div>
+      </div>
+      <div class="stats" id="stats"></div>
+    </header>
+
+    <main class="main">
+      <section class="panel">
+        <div class="panelHeader">
+          <div class="panelTitle">Nodes</div>
+          <div class="panelHint">Live state (synced / syncing / offline)</div>
+        </div>
+
+        <div class="tableWrap">
+          <table class="table" id="nodesTable">
+            <thead>
+              <tr>
+                <th>Node</th>
+                <th>Status</th>
+                <th class="num">Height</th>
+                <th class="num">Lag</th>
+                <th>Last hash</th>
+                <th class="num">Sent</th>
+                <th class="num">Recv</th>
+                <th>Last seen</th>
+              </tr>
+            </thead>
+            <tbody id="nodesTbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panelHeader">
+          <div class="panelTitle">Connections</div>
+          <div class="panelHint">Who talks to whom (peer up/down)</div>
+        </div>
+
+        <div class="graphWrap">
+          <canvas id="graph" width="900" height="520"></canvas>
+        </div>
+        <div class="legend">
+          <div class="pill synced">Synced</div>
+          <div class="pill syncing">Syncing</div>
+          <div class="pill offline">Offline</div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div id="footerStatus">Connecting…</div>
+      <div class="footerRight">Font: Quantico</div>
+    </footer>
+  </div>
+
+  <script src="/assets/app.js"></script>
+</body>
+
+</html>
