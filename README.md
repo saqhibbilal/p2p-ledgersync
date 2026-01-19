@@ -11,11 +11,7 @@ A mini distributed-ledger synchronization project for learning how blockchain-st
 - **Observer/dashboard (`cmd/observer`)**: connects to nodes, aggregates state (nodes, edges, tip/lag, blocks sent/received), and serves a web UI with live updates (SSE).
 
 ### Prerequisites
-- Go installed (1.22+ recommended). Verify:
-
-```powershell
-go version
-```
+- Go installed (1.22+ recommended), or Docker Desktop.
 
 ### Run (Windows / PowerShell)
 From the repo root:
@@ -32,6 +28,22 @@ go run ./cmd/observer -http 127.0.0.1:8080 -seeds 127.0.0.1:50051
 
 Open:
 - `http://127.0.0.1:8080`
+
+### Run (Docker Compose)
+From the repo root:
+
+```powershell
+docker compose up --build
+```
+
+Open:
+- `http://localhost:8080`
+
+Stop:
+
+```powershell
+docker compose down
+```
 
 ### Protobuf codegen (optional)
 Generated stubs are already in `gen/go/`. If you edit `proto/`, regenerate with Buf:

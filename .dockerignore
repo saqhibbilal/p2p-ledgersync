@@ -1,0 +1,13 @@
+.git
+.cursor
+.vscode
+
+**/*.exe
+**/*.dll
+**/*.pdb
+
+terminals
+**/terminals
+
+gen/go
+

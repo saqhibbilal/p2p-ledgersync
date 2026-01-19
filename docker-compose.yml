@@ -1,0 +1,41 @@
+services:
+  node1:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: ["/app/node", "-id", "n1", "-listen", "0.0.0.0:50051", "-init-blocks", "25"]
+    ports:
+      - "50051:50051"
+
+  node2:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: ["/app/node", "-id", "n2", "-listen", "0.0.0.0:50052", "-seeds", "node1:50051"]
+    depends_on:
+      - node1
+    ports:
+      - "50052:50052"
+
+  node3:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: ["/app/node", "-id", "n3", "-listen", "0.0.0.0:50053", "-seeds", "node2:50052"]
+    depends_on:
+      - node2
+    ports:
+      - "50053:50053"
+
+  observer:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    command: ["/app/observer", "-http", "0.0.0.0:8080", "-seeds", "node1:50051"]
+    depends_on:
+      - node1
+      - node2
+      - node3
+    ports:
+      - "8080:8080"
+
