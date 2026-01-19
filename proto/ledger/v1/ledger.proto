@@ -1,0 +1,133 @@
+syntax = "proto3";
+
+package ledger.v1;
+
+option go_package = "ledger-sync/gen/go/ledger/v1;ledgerv1";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+// NodeService is the peer-to-peer API used by nodes to discover peers,
+// exchange ledger summaries, and fetch missing blocks.
+service NodeService {
+  rpc Handshake(HandshakeRequest) returns (HandshakeResponse);
+
+  // GossipStream exchanges summaries and optional peer lists.
+  rpc GossipStream(stream GossipMessage) returns (stream GossipMessage);
+
+  // GetBlocks streams blocks from start_height..end_height (inclusive).
+  // If end_height is 0, the server streams up to its current tip.
+  rpc GetBlocks(GetBlocksRequest) returns (stream Block);
+}
+
+// ObserverService is a read-only API intended for dashboards/debugging.
+service ObserverService {
+  rpc GetNodeInfo(google.protobuf.Empty) returns (NodeInfo);
+  rpc StreamNodeEvents(google.protobuf.Empty) returns (stream NodeEvent);
+}
+
+message HandshakeRequest {
+  uint32 protocol_version = 1;
+  string software_version = 2;
+  string node_id = 3;
+  string listen_addr = 4; // host:port as seen by the remote (best-effort)
+}
+
+message HandshakeResponse {
+  uint32 protocol_version = 1;
+  string software_version = 2;
+  string node_id = 3;
+  string listen_addr = 4;
+  repeated Peer peers = 5;
+  LedgerSummary summary = 6;
+}
+
+message Peer {
+  string node_id = 1;
+  string addr = 2; // host:port
+}
+
+message LedgerSummary {
+  uint64 tip_height = 1;
+  bytes tip_hash = 2; // 32 bytes
+}
+
+message GossipMessage {
+  google.protobuf.Timestamp sent_at = 1;
+
+  oneof msg {
+    LedgerSummary summary = 2;
+    PeerList peer_list = 3;
+    SyncRequest sync_request = 4;
+  }
+}
+
+message PeerList {
+  repeated Peer peers = 1;
+}
+
+// Optional: a hint that the sender believes the receiver is behind.
+// The receiver may ignore this and rely on summaries.
+message SyncRequest {
+  uint64 want_from_height = 1;
+}
+
+message GetBlocksRequest {
+  uint64 start_height = 1; // inclusive
+  uint64 end_height = 2;   // inclusive; 0 means "up to tip"
+}
+
+message Block {
+  uint64 height = 1;
+  bytes prev_hash = 2; // 32 bytes
+  bytes hash = 3;      // 32 bytes
+  google.protobuf.Timestamp time = 4;
+  bytes payload = 5;
+}
+
+message NodeInfo {
+  uint32 protocol_version = 1;
+  string software_version = 2;
+  string node_id = 3;
+  string listen_addr = 4;
+  LedgerSummary summary = 5;
+}
+
+message NodeEvent {
+  google.protobuf.Timestamp at = 1;
+
+  oneof event {
+    PeerUp peer_up = 2;
+    PeerDown peer_down = 3;
+    LedgerTipChanged ledger_tip_changed = 4;
+    BlocksSent blocks_sent = 5;
+    BlocksReceived blocks_received = 6;
+  }
+}
+
+message PeerUp {
+  Peer peer = 1;
+}
+
+message PeerDown {
+  Peer peer = 1;
+  string reason = 2;
+}
+
+message LedgerTipChanged {
+  uint64 old_height = 1;
+  bytes old_hash = 2;
+  uint64 new_height = 3;
+  bytes new_hash = 4;
+}
+
+message BlocksSent {
+  Peer peer = 1;
+  uint64 count = 2;
+}
+
+message BlocksReceived {
+  Peer peer = 1;
+  uint64 count = 2;
+}
+
