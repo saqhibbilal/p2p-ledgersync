@@ -94,6 +94,10 @@ body {
   flex: 1;
 }
 
+.span2 {
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 1100px) {
   .main {
     grid-template-columns: 1fr;
@@ -230,4 +234,134 @@ canvas {
   justify-content: space-between;
   color: var(--muted);
   font-size: 12px;
+}
+
+.logWrap {
+  padding: 8px 10px 12px;
+}
+
+.logList {
+  max-height: 280px;
+  overflow: auto;
+  border: 1px solid rgba(255, 255, 255, .06);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, .14);
+}
+
+.logRow {
+  display: grid;
+  grid-template-columns: 110px 80px 170px 1fr;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+  align-items: center;
+  font-size: 12px;
+}
+
+.logRow:last-child {
+  border-bottom: 0;
+}
+
+.logRow:hover {
+  background: rgba(86, 166, 255, .06);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .10);
+  background: rgba(255, 255, 255, .04);
+  letter-spacing: .4px;
+}
+
+.tag.peer {
+  border-color: rgba(86, 166, 255, .35);
+  color: #b8d7ff;
+}
+
+.tag.blocks {
+  border-color: rgba(245, 197, 66, .35);
+  color: #ffe3a0;
+}
+
+.tag.tip {
+  border-color: rgba(43, 213, 118, .35);
+  color: #b7f5d3;
+}
+
+.logControls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.input {
+  background: rgba(0, 0, 0, .22);
+  border: 1px solid rgba(255, 255, 255, .10);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 10px;
+  min-width: 260px;
+  outline: none;
+}
+
+.input:focus {
+  border-color: rgba(86, 166, 255, .45);
+  box-shadow: 0 0 0 3px rgba(86, 166, 255, .14);
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.btn {
+  background: rgba(86, 166, 255, .12);
+  border: 1px solid rgba(86, 166, 255, .30);
+  color: #d6e7ff;
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.btn:hover {
+  background: rgba(86, 166, 255, .18);
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  max-width: 360px;
+  background: rgba(15, 22, 36, .96);
+  border: 1px solid rgba(255, 255, 255, .10);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .45);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.tooltip.hidden {
+  display: none;
+}
+
+.tooltip .tTitle {
+  font-size: 12px;
+  letter-spacing: .4px;
+}
+
+.tooltip .tSub {
+  margin-top: 6px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 11px;
 }

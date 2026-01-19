@@ -41,6 +41,16 @@ type EdgeState struct {
 	LastAt   time.Time `json:"lastAt"`
 }
 
+type LogEntry struct {
+	At       time.Time `json:"at"`
+	Type     string    `json:"type"` // peer | blocks | tip | info
+	NodeID   string    `json:"nodeId"`
+	NodeAddr string    `json:"nodeAddr"`
+	PeerID   string    `json:"peerId,omitempty"`
+	PeerAddr string    `json:"peerAddr,omitempty"`
+	Message  string    `json:"message"`
+}
+
 type Snapshot struct {
 	At           time.Time   `json:"at"`
 	NetworkTip   uint64      `json:"networkTip"`
@@ -51,6 +61,7 @@ type Snapshot struct {
 	OfflineCount int         `json:"offlineCount"`
 	Nodes        []NodeState `json:"nodes"`
 	Edges        []EdgeState `json:"edges"`
+	Events       []LogEntry  `json:"events"`
 }
 
 type Store struct {
@@ -58,6 +69,8 @@ type Store struct {
 
 	nodesByAddr map[string]*NodeState
 	edges       map[string]*EdgeState // key = fromAddr + "->" + toAddr
+	logs        []LogEntry
+	logCap      int
 
 	networkTip uint64
 }
@@ -66,6 +79,7 @@ func NewStore() *Store {
 	return &Store{
 		nodesByAddr: make(map[string]*NodeState),
 		edges:       make(map[string]*EdgeState),
+		logCap:      400,
 	}
 }
 
@@ -95,14 +109,38 @@ func (s *Store) UpdateNodeInfo(addr string, protocol uint32, software string, ti
 		n = &NodeState{Addr: addr}
 		s.nodesByAddr[addr] = n
 	}
-	n.Protocol = protocol
-	n.Software = software
+	// Avoid wiping known values when an event only updates tip.
+	if protocol != 0 {
+		n.Protocol = protocol
+	}
+	if software != "" {
+		n.Software = software
+	}
 	n.TipHeight = tipHeight
 	if len(tipHash) > 0 {
 		n.TipHash = hex.EncodeToString(tipHash)
 	}
 	n.LastSeen = time.Now()
 	n.Online = true
+}
+
+func (s *Store) AddLog(e LogEntry) {
+	if e.Message == "" {
+		return
+	}
+	if e.At.IsZero() {
+		e.At = time.Now()
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.logs = append(s.logs, e)
+	if s.logCap <= 0 {
+		s.logCap = 400
+	}
+	if len(s.logs) > s.logCap {
+		// drop oldest
+		s.logs = s.logs[len(s.logs)-s.logCap:]
+	}
 }
 
 func (s *Store) MarkSeen(addr string) {
@@ -202,6 +240,13 @@ func (s *Store) Snapshot(offlineAfter time.Duration) Snapshot {
 	for _, e := range s.edges {
 		edges = append(edges, *e)
 	}
+
+	// Newest-first, capped for UI payload size.
+	const maxEvents = 200
+	events := make([]LogEntry, 0, minInt(maxEvents, len(s.logs)))
+	for i := len(s.logs) - 1; i >= 0 && len(events) < maxEvents; i-- {
+		events = append(events, s.logs[i])
+	}
 	s.mu.Unlock()
 
 	sort.Slice(nodes, func(i, j int) bool {
@@ -244,6 +289,14 @@ func (s *Store) Snapshot(offlineAfter time.Duration) Snapshot {
 		OfflineCount: offline,
 		Nodes:        nodes,
 		Edges:        edges,
+		Events:       events,
 	}
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 

@@ -212,26 +212,70 @@ func (o *Observer) applyNodeEvent(addr string, ev *ledgerv1.NodeEvent, enqueue f
 	if from != nil {
 		fromID = from.ID
 	}
+	at := time.Now()
+	if ev.GetAt() != nil {
+		at = ev.GetAt().AsTime()
+	}
 
 	switch e := ev.Event.(type) {
 	case *ledgerv1.NodeEvent_PeerUp:
 		if e.PeerUp != nil && e.PeerUp.Peer != nil {
 			p := e.PeerUp.Peer
 			o.store.SetEdge(addr, fromID, p.GetAddr(), p.GetNodeId(), true)
+			o.store.AddLog(LogEntry{
+				At:       at,
+				Type:     "peer",
+				NodeID:   fromID,
+				NodeAddr: addr,
+				PeerID:   p.GetNodeId(),
+				PeerAddr: p.GetAddr(),
+				Message:  "peer up",
+			})
 			enqueue(p.GetAddr())
 		}
 	case *ledgerv1.NodeEvent_PeerDown:
 		if e.PeerDown != nil && e.PeerDown.Peer != nil {
 			p := e.PeerDown.Peer
 			o.store.SetEdge(addr, fromID, p.GetAddr(), p.GetNodeId(), false)
+			o.store.AddLog(LogEntry{
+				At:       at,
+				Type:     "peer",
+				NodeID:   fromID,
+				NodeAddr: addr,
+				PeerID:   p.GetNodeId(),
+				PeerAddr: p.GetAddr(),
+				Message:  "peer down",
+			})
 		}
 	case *ledgerv1.NodeEvent_LedgerTipChanged:
 		if e.LedgerTipChanged != nil {
 			o.store.UpdateNodeInfo(addr, 0, "", e.LedgerTipChanged.GetNewHeight(), e.LedgerTipChanged.GetNewHash())
+			o.store.AddLog(LogEntry{
+				At:       at,
+				Type:     "tip",
+				NodeID:   fromID,
+				NodeAddr: addr,
+				Message:  fmt.Sprintf("tip -> %d", e.LedgerTipChanged.GetNewHeight()),
+			})
 		}
 	case *ledgerv1.NodeEvent_BlocksReceived:
 		if e.BlocksReceived != nil {
 			o.store.AddBlocksReceived(addr, e.BlocksReceived.GetCount())
+			peerAddr := ""
+			peerID := ""
+			if e.BlocksReceived.Peer != nil {
+				peerAddr = e.BlocksReceived.Peer.GetAddr()
+				peerID = e.BlocksReceived.Peer.GetNodeId()
+			}
+			o.store.AddLog(LogEntry{
+				At:       at,
+				Type:     "blocks",
+				NodeID:   fromID,
+				NodeAddr: addr,
+				PeerID:   peerID,
+				PeerAddr: peerAddr,
+				Message:  fmt.Sprintf("received %d blocks", e.BlocksReceived.GetCount()),
+			})
 			if e.BlocksReceived.Peer != nil {
 				enqueue(e.BlocksReceived.Peer.GetAddr())
 			}
@@ -239,6 +283,21 @@ func (o *Observer) applyNodeEvent(addr string, ev *ledgerv1.NodeEvent, enqueue f
 	case *ledgerv1.NodeEvent_BlocksSent:
 		if e.BlocksSent != nil {
 			o.store.AddBlocksSent(addr, e.BlocksSent.GetCount())
+			peerAddr := ""
+			peerID := ""
+			if e.BlocksSent.Peer != nil {
+				peerAddr = e.BlocksSent.Peer.GetAddr()
+				peerID = e.BlocksSent.Peer.GetNodeId()
+			}
+			o.store.AddLog(LogEntry{
+				At:       at,
+				Type:     "blocks",
+				NodeID:   fromID,
+				NodeAddr: addr,
+				PeerID:   peerID,
+				PeerAddr: peerAddr,
+				Message:  fmt.Sprintf("sent %d blocks", e.BlocksSent.GetCount()),
+			})
 			if e.BlocksSent.Peer != nil {
 				enqueue(e.BlocksSent.Peer.GetAddr())
 			}

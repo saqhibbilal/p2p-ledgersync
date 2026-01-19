@@ -64,6 +64,25 @@
           <div class="pill offline">Offline</div>
         </div>
       </section>
+
+      <section class="panel span2">
+        <div class="panelHeader">
+          <div>
+            <div class="panelTitle">Event log</div>
+            <div class="panelHint">Newest-first • capped • filterable</div>
+          </div>
+          <div class="logControls">
+            <input id="logSearch" class="input" placeholder="Filter (node, addr, message)…" />
+            <label class="check"><input type="checkbox" id="fPeer" checked />Peer</label>
+            <label class="check"><input type="checkbox" id="fBlocks" checked />Blocks</label>
+            <label class="check"><input type="checkbox" id="fTip" checked />Tip</label>
+            <button id="logReset" class="btn" type="button">Reset</button>
+          </div>
+        </div>
+        <div class="logWrap">
+          <div class="logList" id="logList"></div>
+        </div>
+      </section>
     </main>
 
     <footer class="footer">
@@ -71,6 +90,8 @@
       <div class="footerRight">Font: Quantico</div>
     </footer>
   </div>
+
+  <div id="tooltip" class="tooltip hidden"></div>
 
   <script src="/assets/app.js"></script>
 </body>
