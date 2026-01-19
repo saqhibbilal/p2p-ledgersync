@@ -59,6 +59,8 @@ func main() {
 		n.Logf("seeds: %s", strings.Join(seedAddrs, ", "))
 		n.PeerManager().EnsurePeers(ctx, seedAddrs)
 	}
+	// Background discovery/reconnect loop.
+	go n.PeerManager().Start(ctx)
 
 	go func() {
 		n.Logf("listening on %s (tip=%d)", *listen, tip(store))

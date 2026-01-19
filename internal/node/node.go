@@ -57,7 +57,8 @@ func (n *Node) Handshake(ctx context.Context, req *ledgerv1.HandshakeRequest) (*
 		SoftwareVersion: SoftwareVersion,
 		NodeId:          n.id,
 		ListenAddr:      n.listenAddr,
-		Peers:           n.peers.ListPeersPB(),
+		// Return known peers for discovery (not only currently-connected peers).
+		Peers:           n.peers.KnownPeersPB(64, ""),
 		Summary:         summaryFromStore(n.store),
 	}
 

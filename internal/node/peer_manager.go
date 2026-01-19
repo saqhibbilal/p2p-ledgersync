@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"strings"
 	"sync"
 	"time"
@@ -20,8 +21,13 @@ import (
 type PeerManager struct {
 	n *Node
 
-	mu    sync.RWMutex
-	peers map[string]*PeerConn // key: addr
+	mu          sync.RWMutex
+	peers       map[string]*PeerConn    // key: addr (active conns)
+	knownPeers  map[string]*ledgerv1.Peer // key: addr (discovered + seeds)
+	lastAttempt map[string]time.Time    // addr -> last dial attempt
+
+	rngMu sync.Mutex
+	rng   *rand.Rand
 }
 
 type PeerConn struct {
@@ -39,8 +45,105 @@ type PeerConn struct {
 
 func NewPeerManager(n *Node) *PeerManager {
 	return &PeerManager{
-		n:     n,
-		peers: make(map[string]*PeerConn),
+		n:           n,
+		peers:       make(map[string]*PeerConn),
+		knownPeers:  make(map[string]*ledgerv1.Peer),
+		lastAttempt: make(map[string]time.Time),
+		rng:         rand.New(rand.NewSource(time.Now().UnixNano())),
+	}
+}
+
+// KnownPeersPB returns a snapshot of known peers (for discovery), capped.
+func (pm *PeerManager) KnownPeersPB(max int, excludeAddr string) []*ledgerv1.Peer {
+	if max <= 0 {
+		return nil
+	}
+	pm.mu.RLock()
+	cands := make([]*ledgerv1.Peer, 0, len(pm.knownPeers))
+	for addr, p := range pm.knownPeers {
+		if addr == "" || addr == excludeAddr || addr == pm.n.ListenAddr() {
+			continue
+		}
+		cands = append(cands, p)
+	}
+	pm.mu.RUnlock()
+
+	if len(cands) == 0 {
+		return nil
+	}
+
+	pm.rngMu.Lock()
+	pm.rng.Shuffle(len(cands), func(i, j int) { cands[i], cands[j] = cands[j], cands[i] })
+	pm.rngMu.Unlock()
+
+	if len(cands) > max {
+		cands = cands[:max]
+	}
+	out := make([]*ledgerv1.Peer, 0, len(cands))
+	for _, p := range cands {
+		if p == nil {
+			continue
+		}
+		out = append(out, &ledgerv1.Peer{NodeId: p.GetNodeId(), Addr: p.GetAddr()})
+	}
+	return out
+}
+
+// NotePeer records a discovered peer (seed, handshake peer list, gossip peer list).
+// It does not automatically dial; use EnsurePeer/EnsurePeers or Start.
+func (pm *PeerManager) NotePeer(p *ledgerv1.Peer) {
+	if p == nil {
+		return
+	}
+	addr := strings.TrimSpace(p.GetAddr())
+	if addr == "" || addr == pm.n.ListenAddr() {
+		return
+	}
+	nodeID := strings.TrimSpace(p.GetNodeId())
+
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+
+	existing, ok := pm.knownPeers[addr]
+	if !ok {
+		pm.knownPeers[addr] = &ledgerv1.Peer{NodeId: nodeID, Addr: addr}
+		return
+	}
+	// Fill in node id if we learned it.
+	if existing.GetNodeId() == "" && nodeID != "" {
+		existing.NodeId = nodeID
+	}
+}
+
+// Start runs a background reconciliation loop that tries to connect to known peers.
+func (pm *PeerManager) Start(ctx context.Context) {
+	const (
+		tick            = 2 * time.Second
+		maxDialPerTick  = 2
+		attemptCooldown = 3 * time.Second
+	)
+
+	t := time.NewTicker(tick)
+	defer t.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			cands := pm.sampleKnownPeers(maxDialPerTick, "")
+			for _, c := range cands {
+				// apply per-peer cooldown
+				if !pm.markAttemptIfAllowed(c.Addr, attemptCooldown) {
+					continue
+				}
+				go func(addr string) {
+					if err := pm.EnsurePeer(ctx, addr); err != nil {
+						pm.n.Logf("peer dial failed addr=%s err=%v", addr, err)
+					}
+				}(c.Addr)
+			}
+		}
 	}
 }
 
@@ -54,24 +157,9 @@ func (pm *PeerManager) ListPeersPB() []*ledgerv1.Peer {
 	return out
 }
 
-func parseSeeds(seedsCSV string) []string {
-	if strings.TrimSpace(seedsCSV) == "" {
-		return nil
-	}
-	parts := strings.Split(seedsCSV, ",")
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-		out = append(out, p)
-	}
-	return out
-}
-
 func (pm *PeerManager) EnsurePeers(ctx context.Context, addrs []string) {
 	for _, addr := range addrs {
+		pm.NotePeer(&ledgerv1.Peer{Addr: addr})
 		addr := addr
 		go func() {
 			if err := pm.EnsurePeer(ctx, addr); err != nil {
@@ -88,6 +176,7 @@ func (pm *PeerManager) EnsurePeer(ctx context.Context, addr string) error {
 	if addr == pm.n.ListenAddr() {
 		return nil
 	}
+	pm.NotePeer(&ledgerv1.Peer{Addr: addr})
 
 	pm.mu.RLock()
 	if _, ok := pm.peers[addr]; ok {
@@ -124,6 +213,13 @@ func (pm *PeerManager) EnsurePeer(ctx context.Context, addr string) error {
 		return err
 	}
 
+	// Add peers from handshake (discovery).
+	for _, hp := range hs.GetPeers() {
+		pm.NotePeer(hp)
+	}
+	// Ensure seeds/handshake peers can be dialed in the background.
+	go pm.EnsurePeers(ctx, peersAddrsFromPB(hs.GetPeers()))
+
 	p := &PeerConn{
 		addr:           addr,
 		nodeID:         hs.GetNodeId(),
@@ -148,6 +244,8 @@ func (pm *PeerManager) EnsurePeer(ctx context.Context, addr string) error {
 	pm.peers[addr] = p
 	pm.mu.Unlock()
 
+	pm.NotePeer(&ledgerv1.Peer{NodeId: p.nodeID, Addr: p.addr})
+
 	pm.n.Logf("peer up addr=%s node_id=%s tip=%d", addr, p.nodeID, p.remoteTip)
 	pm.n.events.Publish(&ledgerv1.NodeEvent{
 		At: timestamppb.Now(),
@@ -160,6 +258,71 @@ func (pm *PeerManager) EnsurePeer(ctx context.Context, addr string) error {
 	go pm.maybeSyncFromPeer(ctx, p, p.remoteTip)
 
 	return nil
+}
+
+func peersAddrsFromPB(in []*ledgerv1.Peer) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(in))
+	for _, p := range in {
+		if p == nil {
+			continue
+		}
+		addr := strings.TrimSpace(p.GetAddr())
+		if addr == "" {
+			continue
+		}
+		out = append(out, addr)
+	}
+	return out
+}
+
+func (pm *PeerManager) markAttemptIfAllowed(addr string, cooldown time.Duration) bool {
+	now := time.Now()
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	if last, ok := pm.lastAttempt[addr]; ok && now.Sub(last) < cooldown {
+		return false
+	}
+	pm.lastAttempt[addr] = now
+	return true
+}
+
+func (pm *PeerManager) sampleKnownPeers(max int, excludeAddr string) []*ledgerv1.Peer {
+	pm.mu.RLock()
+	cands := make([]*ledgerv1.Peer, 0, len(pm.knownPeers))
+	for addr, p := range pm.knownPeers {
+		if addr == "" || addr == excludeAddr || addr == pm.n.ListenAddr() {
+			continue
+		}
+		// skip if already connected
+		if _, ok := pm.peers[addr]; ok {
+			continue
+		}
+		cands = append(cands, p)
+	}
+	pm.mu.RUnlock()
+
+	if len(cands) == 0 || max <= 0 {
+		return nil
+	}
+
+	pm.rngMu.Lock()
+	pm.rng.Shuffle(len(cands), func(i, j int) { cands[i], cands[j] = cands[j], cands[i] })
+	pm.rngMu.Unlock()
+
+	if len(cands) > max {
+		cands = cands[:max]
+	}
+	out := make([]*ledgerv1.Peer, 0, len(cands))
+	for _, p := range cands {
+		if p == nil {
+			continue
+		}
+		out = append(out, &ledgerv1.Peer{NodeId: p.GetNodeId(), Addr: p.GetAddr()})
+	}
+	return out
 }
 
 func (pm *PeerManager) runGossip(ctx context.Context, p *PeerConn) {
@@ -188,10 +351,13 @@ func (pm *PeerManager) runGossip(ctx context.Context, p *PeerConn) {
 	}
 
 	// send loop
-	sendTicker := time.NewTicker(1 * time.Second)
-	defer sendTicker.Stop()
+	summaryTicker := time.NewTicker(1 * time.Second)
+	defer summaryTicker.Stop()
 
-	send := func() error {
+	peerListTicker := time.NewTicker(5 * time.Second)
+	defer peerListTicker.Stop()
+
+	sendSummary := func() error {
 		msg := &ledgerv1.GossipStreamRequest{
 			SentAt: timestamppb.Now(),
 			Msg: &ledgerv1.GossipStreamRequest_Summary{
@@ -201,7 +367,21 @@ func (pm *PeerManager) runGossip(ctx context.Context, p *PeerConn) {
 		return stream.Send(msg)
 	}
 
-	if err := send(); err != nil {
+	sendPeerList := func() error {
+		peers := pm.KnownPeersPB(32, p.addr)
+		if len(peers) == 0 {
+			return nil
+		}
+		msg := &ledgerv1.GossipStreamRequest{
+			SentAt: timestamppb.Now(),
+			Msg: &ledgerv1.GossipStreamRequest_PeerList{
+				PeerList: &ledgerv1.PeerList{Peers: peers},
+			},
+		}
+		return stream.Send(msg)
+	}
+
+	if err := sendSummary(); err != nil {
 		pm.n.Logf("gossip send initial failed addr=%s err=%v", p.addr, err)
 		return
 	}
@@ -232,6 +412,11 @@ func (pm *PeerManager) runGossip(ctx context.Context, p *PeerConn) {
 				p.remoteTip = remoteTip
 				p.mu.Unlock()
 				go pm.maybeSyncFromPeer(ctx, p, remoteTip)
+			case *ledgerv1.GossipStreamResponse_PeerList:
+				if m.PeerList == nil {
+					continue
+				}
+				pm.ingestPeerList(ctx, p, m.PeerList.GetPeers())
 			default:
 				// ignore for now
 			}
@@ -248,12 +433,71 @@ func (pm *PeerManager) runGossip(ctx context.Context, p *PeerConn) {
 				pm.n.Logf("gossip recv ended addr=%s err=%v", p.addr, err)
 			}
 			return
-		case <-sendTicker.C:
-			if err := send(); err != nil {
+		case <-summaryTicker.C:
+			if err := sendSummary(); err != nil {
+				pm.n.Logf("gossip send failed addr=%s err=%v", p.addr, err)
+				return
+			}
+		case <-peerListTicker.C:
+			if err := sendPeerList(); err != nil {
 				pm.n.Logf("gossip send failed addr=%s err=%v", p.addr, err)
 				return
 			}
 		}
+	}
+}
+
+func (pm *PeerManager) ingestPeerList(ctx context.Context, from *PeerConn, peers []*ledgerv1.Peer) {
+	if len(peers) == 0 {
+		return
+	}
+
+	// Record all discovered peers.
+	for _, p := range peers {
+		pm.NotePeer(p)
+	}
+
+	// Opportunistically dial a small random subset to expand connectivity.
+	const (
+		maxDial         = 2
+		attemptCooldown = 3 * time.Second
+	)
+
+	// Sample from what we just received.
+	cands := make([]*ledgerv1.Peer, 0, len(peers))
+	for _, p := range peers {
+		if p == nil {
+			continue
+		}
+		addr := strings.TrimSpace(p.GetAddr())
+		if addr == "" || addr == pm.n.ListenAddr() || addr == from.addr {
+			continue
+		}
+		cands = append(cands, p)
+	}
+	if len(cands) == 0 {
+		return
+	}
+
+	pm.rngMu.Lock()
+	pm.rng.Shuffle(len(cands), func(i, j int) { cands[i], cands[j] = cands[j], cands[i] })
+	pm.rngMu.Unlock()
+
+	if len(cands) > maxDial {
+		cands = cands[:maxDial]
+	}
+
+	for _, c := range cands {
+		addr := strings.TrimSpace(c.GetAddr())
+		if addr == "" {
+			continue
+		}
+		if !pm.markAttemptIfAllowed(addr, attemptCooldown) {
+			continue
+		}
+		go func(a string) {
+			_ = pm.EnsurePeer(ctx, a)
+		}(addr)
 	}
 }
 
