@@ -5,7 +5,7 @@ modules:
 
 lint:
   use:
-    - DEFAULT
+    - STANDARD
 
 breaking:
   use:

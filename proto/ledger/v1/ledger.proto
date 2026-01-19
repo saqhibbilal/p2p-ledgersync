@@ -4,7 +4,6 @@ package ledger.v1;
 
 option go_package = "ledger-sync/gen/go/ledger/v1;ledgerv1";
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 // NodeService is the peer-to-peer API used by nodes to discover peers,
@@ -13,17 +12,17 @@ service NodeService {
   rpc Handshake(HandshakeRequest) returns (HandshakeResponse);
 
   // GossipStream exchanges summaries and optional peer lists.
-  rpc GossipStream(stream GossipMessage) returns (stream GossipMessage);
+  rpc GossipStream(stream GossipStreamRequest) returns (stream GossipStreamResponse);
 
   // GetBlocks streams blocks from start_height..end_height (inclusive).
   // If end_height is 0, the server streams up to its current tip.
-  rpc GetBlocks(GetBlocksRequest) returns (stream Block);
+  rpc GetBlocks(GetBlocksRequest) returns (stream GetBlocksResponse);
 }
 
 // ObserverService is a read-only API intended for dashboards/debugging.
 service ObserverService {
-  rpc GetNodeInfo(google.protobuf.Empty) returns (NodeInfo);
-  rpc StreamNodeEvents(google.protobuf.Empty) returns (stream NodeEvent);
+  rpc GetNodeInfo(GetNodeInfoRequest) returns (GetNodeInfoResponse);
+  rpc StreamNodeEvents(StreamNodeEventsRequest) returns (stream StreamNodeEventsResponse);
 }
 
 message HandshakeRequest {
@@ -52,7 +51,17 @@ message LedgerSummary {
   bytes tip_hash = 2; // 32 bytes
 }
 
-message GossipMessage {
+message GossipStreamRequest {
+  google.protobuf.Timestamp sent_at = 1;
+
+  oneof msg {
+    LedgerSummary summary = 2;
+    PeerList peer_list = 3;
+    SyncRequest sync_request = 4;
+  }
+}
+
+message GossipStreamResponse {
   google.protobuf.Timestamp sent_at = 1;
 
   oneof msg {
@@ -77,6 +86,10 @@ message GetBlocksRequest {
   uint64 end_height = 2;   // inclusive; 0 means "up to tip"
 }
 
+message GetBlocksResponse {
+  Block block = 1;
+}
+
 message Block {
   uint64 height = 1;
   bytes prev_hash = 2; // 32 bytes
@@ -85,12 +98,20 @@ message Block {
   bytes payload = 5;
 }
 
-message NodeInfo {
+message GetNodeInfoRequest {}
+
+message GetNodeInfoResponse {
   uint32 protocol_version = 1;
   string software_version = 2;
   string node_id = 3;
   string listen_addr = 4;
   LedgerSummary summary = 5;
+}
+
+message StreamNodeEventsRequest {}
+
+message StreamNodeEventsResponse {
+  NodeEvent event = 1;
 }
 
 message NodeEvent {
